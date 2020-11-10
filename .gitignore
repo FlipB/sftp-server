@@ -1,0 +1,6 @@
+/.vscode/
+/server
+
+# ignore contents of sftproot - the default data dir of SFTP server
+/sftproot/*
+!/sftproot/.gitkeep
