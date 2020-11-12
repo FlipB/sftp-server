@@ -13,7 +13,7 @@ buildGoModule rec {
   src = ./.;
 
   # The hash of the output of the intermediate fetcher derivation
-  vendorSha256 = "";
+  vendorSha256 = "0gdfamxg4b6xb2b3d9ri48d1iskj7zfiwsipbmf954mdcqdiqnqb";
 
   # runVend runs the vend command to generate the vendor directory. This is useful if your code depends on c code and go mod tidy does not include the needed sources to build. 
   runVend = false;
@@ -29,6 +29,7 @@ buildGoModule rec {
     description = "SFTP Server implementation";
     homepage = "https://github.com/flipb/sftp-server";
     platforms = platforms.linux;
+    
     license = licenses.mit;
     maintainers = with maintainers; [ flipb ];
   };

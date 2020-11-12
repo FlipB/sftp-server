@@ -312,7 +312,7 @@ func (s *Server) ServeSystemdSocket() error {
 		return fmt.Errorf("error getting listeners from systemd: %w", err)
 	}
 	if len(listeners) != 1 {
-		return fmt.Errorf("expected only 1 listener from systemd, got %d", len(listeners))
+		return fmt.Errorf("expected 1 listener from systemd, got %d", len(listeners))
 	}
 
 	return s.ServeSocket(listeners[0])

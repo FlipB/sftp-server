@@ -2,9 +2,22 @@
 
 - make it so you cannot delete the root folder.
   This probably involves reworking/moving pathSanitize call.
+- finish unit tests
+
+# Build with nix
+
+```sh
+nix-build .
+./result/bin/server -h
+```
 
 # Running
 
+Running with systemd socket activtion. Systemd will start the server and pass a socket.
+Server will automatically exit after being idle for 10 seconds.
+```sh
+systemd-socket-activate -l 2211 ./result/bin/server -socket -exit -hostkey ./ssh_host_id_rsa -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9
+```
 
 ```
 # Run SFTP server for user 'root' password 'toor' and take SSH keys from Stdin
