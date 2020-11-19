@@ -11,42 +11,37 @@ nix-build .
 ./result/bin/server -h
 ```
 
-# Running
+# Testing sftp-server (with `go run`)
 
-Running with systemd socket activtion. Systemd will start the server and pass a socket.
-Server will automatically exit after being idle for 10 seconds.
+## Generate a keypair (PEM encoded) to use as SSH Hostkeys on server 
+
 ```sh
-systemd-socket-activate -l 2211 ./result/bin/server -socket -exit -hostkey ./ssh_host_id_rsa -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9
+go run ./cmd/server -generate > keys.pem
 ```
 
-```
-# Run SFTP server for user 'root' password 'toor' and take SSH keys from Stdin
-# When you have a single file with both private and public key
-cat ssh_host_keys_private_public | go run ./cmd/server -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9 -hostkey -
-```
+## Generating a password hash for a user
 
-```
-# Run SFTP server for user 'root' password 'toor' and take SSH keys from Stdin
-# When you have split files
-cat ssh_host_keys_id_rsa ssh_host_keys_id_rsa.pub | go run ./cmd/server -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9 -hostkey -
-```
-
-```
-# Run SFTP server for user 'root' password 'toor' and take SSH keys from
-# ./id_rsa and ./id_rsa.pub
-go run ./cmd/server -hostkey ./id_rsa -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9
-```
-
-# Generating the password hash
-
-```
+```sh
 go run ./cmd/sever -user root -plaintextPassword toor
 ```
 
-# Generating SSH host keys
+## Running
 
+```sh
+# Run SFTP server for user 'root' password 'toor' and take SSH keys from Stdin
+# When you have a single file with both private and public key
+cat keys.pem | go run ./cmd/server -user root -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9 -hostkey - -endpoint 127.0.0.1:2222
 ```
-# NOTE this will create one file with both private and public PEM encoded
-# SSH host keys.
-go run ./cmd/server -generate > ssh_host_keys_private_public
+
+```sh
+# Run SFTP server for user 'root' password 'toor' and take SSH keys from file `keys.pem`
+go run ./cmd/server -hostkey ./keys.pem -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9 -endpoint 127.0.0.1:2222
+```
+
+Running with systemd socket activtion. Systemd will start the server and pass a socket.
+Server will automatically exit after being idle for 10 seconds.
+
+```sh
+# Here we're running the compiled server binary (rather than using `go run`)
+systemd-socket-activate -l 2211 ./result/bin/server -socket -exit -hostkey ./keys.pem -passwordHash d6aa6f8195f195aba1442934e28f20dd7c7ea342dd37cbb1ff422a15962f21e9
 ```

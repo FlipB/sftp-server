@@ -28,7 +28,7 @@ var (
 func main() {
 	flag.StringVar(&rootPath, "root", "./sftproot", "root directory to serve over SFTP")
 	flag.StringVar(&endpoint, "endpoint", "", "endpoint to serve SFTP on (mutually exclusive with socket arg)")
-	flag.StringVar(&hostKeyPath, "hostkey", "./id_rsa", "SSH hostkey to use for SFTP server (written to if not existing). If - PEM key is read from stdin.")
+	flag.StringVar(&hostKeyPath, "hostkey", "./cert.pem", "PEM encoded privte and public keys to use for SFTP server (written to if not existing). If - PEM key is read from stdin.")
 	flag.StringVar(&userName, "user", "root", "name of SFTP user")
 	flag.StringVar(&userPassPlaintext, "plaintextPassword", "", "plaintext password of SFTP user (discouraged)")
 	flag.StringVar(&userNameAndPasswordSha256, "passwordHash", "", "user name and password hashed with sha256 encoded as hex")

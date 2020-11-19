@@ -31,10 +31,9 @@ type Server struct {
 }
 
 type config struct {
-	User        user
-	HostKeyPub  string
-	HostKeyPriv string
-	DataDir     string
+	User    user
+	KeysPEM []byte
+	DataDir string
 
 	MaxDataBytes int64
 }
@@ -71,7 +70,7 @@ func NewServer(rootDirPath, hostKeyPath, userName, userNameAndPasswordSha256 str
 		return nil, fmt.Errorf("root path %q is not a directory", rootDirPath)
 	}
 
-	priv, pub, err := readOrCreateSSHKeys(hostKeyPath)
+	keysPEM, err := readOrCreateSSHKeys(hostKeyPath)
 	if err != nil {
 		return nil, fmt.Errorf("error getting SSH keys: %w", err)
 	}
@@ -86,14 +85,13 @@ func NewServer(rootDirPath, hostKeyPath, userName, userNameAndPasswordSha256 str
 				QuotaBytes: 0,
 			},
 			DataDir:      rootDirPath,
-			HostKeyPriv:  priv,
-			HostKeyPub:   pub,
+			KeysPEM:      keysPEM,
 			MaxDataBytes: 0,
 		},
 	}, nil
 }
 
-func readOrCreateSSHKeys(keyPath string) (priv string, pub string, err error) {
+func readOrCreateSSHKeys(keyPath string) (keys []byte, err error) {
 
 	if keyPath == "-" {
 		// read from stdin instead of from file.
@@ -102,39 +100,27 @@ func readOrCreateSSHKeys(keyPath string) (priv string, pub string, err error) {
 
 	privInfo, err := os.Stat(keyPath)
 	if err != nil && !os.IsNotExist(err) {
-		return "", "", fmt.Errorf("error opening file %q: %w", keyPath, err)
+		return nil, fmt.Errorf("error opening file %q: %w", keyPath, err)
 	}
-	_, err2 := os.Stat(keyPath + ".pub")
-	if err2 != nil && !os.IsNotExist(err2) {
-		return "", "", fmt.Errorf("error opening file %q: %w", keyPath+".pub", err2)
-	}
-	if (os.IsNotExist(err) && os.IsNotExist(err2)) != (os.IsNotExist(err) || os.IsNotExist(err2)) {
-		// only one file doesnt exist.
-		return "", "", fmt.Errorf("key at %q not found", keyPath)
-	}
-	needsGeneration := os.IsNotExist(err) && os.IsNotExist(err2)
+	needsGeneration := os.IsNotExist(err)
 	if !needsGeneration {
 		if !(privInfo.Mode() == 0600 || privInfo.Mode() == 0400) {
-			return "", "", fmt.Errorf("key at %q has too permissive permissions", keyPath)
+			return nil, fmt.Errorf("key at %q has too permissive permissions", keyPath)
 		}
 	}
 
 	if needsGeneration {
 		if err := generateAndWriteSSHKeys(keyPath); err != nil {
-			return "", "", fmt.Errorf("error generating and saving ssh keys at %q: %w", keyPath, err)
+			return nil, fmt.Errorf("error generating and saving ssh keys at %q: %w", keyPath, err)
 		}
 	}
 
-	privKey, err := ioutil.ReadFile(keyPath)
+	pemBytes, err := ioutil.ReadFile(keyPath)
 	if err != nil {
-		return "", "", fmt.Errorf("error reading private key %q: %w", keyPath, err)
-	}
-	pubKey, err := ioutil.ReadFile(keyPath + ".pub")
-	if err != nil {
-		return "", "", fmt.Errorf("error reading public key %q: %w", keyPath+".pub", err)
+		return nil, fmt.Errorf("error reading pem file %q: %w", keyPath, err)
 	}
 
-	return string(privKey), string(pubKey), nil
+	return pemBytes, nil
 }
 
 func generateAndWriteSSHKeys(keyPath string) (err error) {
@@ -143,16 +129,16 @@ func generateAndWriteSSHKeys(keyPath string) (err error) {
 	if err != nil {
 		return err
 	}
+	buf := &bytes.Buffer{}
+	io.Copy(buf, bytes.NewReader(privKeyPEM))
+	buf.WriteByte('\n')
+	io.Copy(buf, bytes.NewReader(pubKeyPEM))
+	buf.WriteByte('\n')
 
-	privateKeyPath := keyPath
-	if err := ioutil.WriteFile(privateKeyPath, privKeyPEM, 0400); err != nil {
+	if err := ioutil.WriteFile(keyPath, buf.Bytes(), 0400); err != nil {
 		return err
 	}
 
-	publicKeyPath := keyPath + ".pub"
-	if err := ioutil.WriteFile(publicKeyPath, pubKeyPEM, 0444); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -181,32 +167,38 @@ func GenerateSSHKeysAsPEM() (priv []byte, pub []byte, err error) {
 	return privKeyPEM, pubKeyPEM, nil
 }
 
-func readKeysFromStdin() (string, string, error) {
+func readKeysFromStdin() ([]byte, error) {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(scanPemRSABlock)
 
-	privateKeyPEM := ""
-	publicKeyPEM := ""
+	var gotPrivate bool
+	var gotPublic bool
+	certPEM := &bytes.Buffer{}
 	for scanner.Scan() {
 
 		pemBlockMaybe := scanner.Bytes()
-		block, _ := pem.Decode(bytes.TrimSpace(pemBlockMaybe))
-
+		pemBlockMaybe = bytes.TrimSpace(pemBlockMaybe)
+		block, _ := pem.Decode(pemBlockMaybe)
 		switch block.Type {
 		case "RSA PRIVATE KEY":
-			privateKeyPEM = string(pemBlockMaybe)
+			io.Copy(certPEM, bytes.NewReader(pemBlockMaybe))
+			certPEM.WriteByte('\n')
+			gotPrivate = true
 		case "RSA PUBLIC KEY":
-			publicKeyPEM = string(pemBlockMaybe)
+			io.Copy(certPEM, bytes.NewReader(pemBlockMaybe))
+			certPEM.WriteByte('\n')
+			gotPublic = true
 		}
-		if len(publicKeyPEM) != 0 && len(privateKeyPEM) != 0 {
+		if gotPrivate && gotPublic {
 			break
 		}
 	}
+
 	err := scanner.Err()
 	if err != nil {
-		return privateKeyPEM, publicKeyPEM, fmt.Errorf("error reading SSH Host keys from stdin: %w", err)
+		return certPEM.Bytes(), fmt.Errorf("error reading SSH Host keys from stdin: %w", err)
 	}
-	return privateKeyPEM, publicKeyPEM, err
+	return certPEM.Bytes(), err
 }
 
 func scanPemRSABlock(data []byte, atEOF bool) (advance int, token []byte, err error) {
@@ -335,7 +327,7 @@ func (s *Server) ServeSocket(listener net.Listener) error {
 		ServerVersion:    "SSH-2.0-wsftp-v0.0.1",
 		PasswordCallback: s.passwordCallback,
 	}
-	private, err := ssh.ParsePrivateKey([]byte(s.conf.HostKeyPriv))
+	private, err := ssh.ParsePrivateKey([]byte(s.conf.KeysPEM))
 	if err != nil {
 		s.log("error parsing private key: %v", err)
 		return err
